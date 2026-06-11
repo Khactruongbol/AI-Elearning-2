@@ -1,92 +1,46 @@
-
 import sys
-sys.path.insert(0, '/mnt/user-data/outputs')
- 
-from dining_philosophers_solver import (
-    constructive_solve,
-    backtracking_solve,
-    verify,
-    EATING, THINKING,
-)
- 
-PASS = "\033[92mPASS\033[0m"
-FAIL = "\033[91mFAIL\033[0m"
- 
-results = []
- 
-def check(name: str, condition: bool) -> None:
-    status = PASS if condition else FAIL
-    print(f"  [{status}] {name}")
-    results.append(condition)
- 
- 
-print("\n== 1. verify() — constraint checker ==")
- 
-check("n=4 all Thinking is valid",
-      verify([THINKING]*4, 4))
- 
-check("n=4 two adjacent Eating is invalid",
-      not verify([EATING, EATING, THINKING, THINKING], 4))
- 
-check("n=4 wrap-around violation [E,T,T,E] at edge (P4,P1) — invalid",
-      not verify([EATING, THINKING, THINKING, EATING], 4))
- 
-check("n=5 valid assignment [E,T,E,T,T]",
-      verify([EATING,THINKING,EATING,THINKING,THINKING], 5))
- 
- 
-print("\n== 2. constructive_solve() ==")
- 
-for n in range(3, 13):
-    sol = constructive_solve(n)
-    eating = sol.count(EATING)
-    check(f"n={n:>2}: valid assignment",          verify(sol, n))
-    check(f"n={n:>2}: achieves floor(n/2)={n//2}", eating == n // 2)
-    check(f"n={n:>2}: non-trivial (not all T)",   any(s == EATING for s in sol))
- 
- 
-print("\n== 3. backtracking_solve() ==")
- 
-for n in range(3, 13):
-    sol, stats = backtracking_solve(n)
-    eating = sol.count(EATING)
-    check(f"n={n:>2}: valid assignment",           verify(sol, n))
-    check(f"n={n:>2}: achieves floor(n/2)={n//2}", eating == n // 2)
-    check(f"n={n:>2}: non-trivial (not all T)",    any(s == EATING for s in sol))
-    check(f"n={n:>2}: nodes_visited > 0",          stats.nodes_visited > 0)
- 
- 
-print("\n== 4. Both solvers agree ==")
- 
-for n in range(3, 13):
-    sol_c  = constructive_solve(n)
-    sol_bt, _ = backtracking_solve(n)
-    check(f"n={n:>2}: same eating count",
-          sol_c.count(EATING) == sol_bt.count(EATING))
- 
- 
-print("\n== 5. Edge cases ==")
- 
-sol3 = constructive_solve(3)
-check("n=3: floor(3/2)=1 Eating", sol3.count(EATING) == 1)
-check("n=3: valid", verify(sol3, 3))
- 
-sol3bt, _ = backtracking_solve(3)
-check("n=3 BT: floor(3/2)=1 Eating", sol3bt.count(EATING) == 1)
-check("n=3 BT: valid", verify(sol3bt, 3))
- 
-sol_large = constructive_solve(20)
-check("n=20: achieves 10 Eating", sol_large.count(EATING) == 10)
-check("n=20: valid", verify(sol_large, 20))
- 
-sol_large_bt, _ = backtracking_solve(20)
-check("n=20 BT: achieves 10 Eating", sol_large_bt.count(EATING) == 10)
-check("n=20 BT: valid", verify(sol_large_bt, 20))
- 
- 
-passed = sum(results)
-total  = len(results)
-print(f"\n{'='*40}")
-print(f"  Result: {passed}/{total} tests passed")
-print(f"{'='*40}\n")
-sys.exit(0 if passed == total else 1)
+import unittest
+from pathlib import Path
+
+
+SRC = Path(__file__).resolve().parents[1] / "src"
+sys.path.insert(0, str(SRC))
+
+from model import DOMAIN, EATING, build_problem, is_valid_assignment, not_both_eating
+from solver import count_eating, max_eating_count, solve
+
+
+class DiningPhilosophersTest(unittest.TestCase):
+    def test_build_problem_n5(self):
+        philosophers, domains, adjacency = build_problem(5)
+
+        self.assertEqual(["P1", "P2", "P3", "P4", "P5"], philosophers)
+        self.assertEqual(DOMAIN, domains["P1"])
+        self.assertEqual(["P5", "P2"], adjacency["P1"])
+        self.assertEqual(["P4", "P1"], adjacency["P5"])
+
+    def test_not_both_eating_constraint(self):
+        self.assertFalse(not_both_eating(EATING, EATING))
+        self.assertTrue(not_both_eating(EATING, "Thinking"))
+        self.assertTrue(not_both_eating("Thinking", EATING))
+
+    def test_solution_for_n5_is_valid_and_complete(self):
+        philosophers, _, adjacency = build_problem(5)
+        solution = solve(5)
+
+        self.assertEqual(set(philosophers), set(solution))
+        self.assertTrue(is_valid_assignment(solution, adjacency))
+        self.assertEqual(2, count_eating(solution))
+
+    def test_solver_maximizes_eating_count_for_many_n(self):
+        for n in range(2, 11):
+            philosophers, _, adjacency = build_problem(n)
+            solution = solve(n)
+
+            self.assertEqual(set(philosophers), set(solution))
+            self.assertTrue(is_valid_assignment(solution, adjacency))
+            self.assertEqual(max_eating_count(n), count_eating(solution))
+
+
+if __name__ == "__main__":
+    unittest.main()
